@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>增强版抽奖小程序</title>
+    
+    <!-- CSS 样式 -->
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+
+        .lottery-container {
+            background-color: white;
+            padding: 25px 40px;
+            border-radius: 10px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        h1 {
+            color: #1a1a1a;
+            margin-bottom: 25px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        label {
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        button {
+            background: linear-gradient(45deg, #FF416C, #FF4B2B);
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: linear-gradient(45deg, #e0385e, #e04225);
+            box-shadow: 0 4px 15px rgba(255, 65, 108, 0.4);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .results-container {
+            margin-top: 30px;
+            text-align: left;
+        }
+        
+        /* 抽奖动画效果 */
+        #animation-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: #FF4B2B;
+            height: 60px;
+            line-height: 60px;
+            margin: 20px 0;
+            border: 2px dashed #ddd;
+            border-radius: 5px;
+        }
+
+        h2 {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        #winner-list {
+            list-style-type: none;
+            padding: 0;
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        #winner-list li {
+            background-color: #f9f9f9;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            border-left: 5px solid #FF416C;
+            font-weight: 500;
+        }
+
+        #winner-list li:nth-child(even) {
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HTML 结构 -->
+    <div class="lottery-container">
+        <h1>幸运抽奖 Pro</h1>
+        <div class="input-group">
+            <label for="participants">总参与人数:</label>
+            <input type="number" id="participants" min="1" value="100">
+        </div>
+        <div class="input-group">
+            <label for="winners">设置中奖名额:</label>
+            <input type="number" id="winners" min="1" value="5">
+        </div>
+        <div class="input-group">
+            <label for="shuffle-rounds">随机洗牌轮数:</label>
+            <input type="number" id="shuffle-rounds" min="1" value="3">
+        </div>
+        <button id="draw-button">开始抽奖</button>
+        
+        <div class="results-container" id="results" style="display: none;">
+            <div id="animation-display">0</div>
+            <h2>中奖名单</h2>
+            <ul id="winner-list"></ul>
+        </div>
+    </div>
+
+    <!-- JavaScript 逻辑 -->
+    <script>
+        // 获取页面上的元素
+        const drawButton = document.getElementById('draw-button');
+        const participantsInput = document.getElementById('participants');
+        const winnersCountInput = document.getElementById('winners');
+        const shuffleRoundsInput = document.getElementById('shuffle-rounds');
+        
+        const resultsContainer = document.getElementById('results');
+        const winnerList = document.getElementById('winner-list');
+        const animationDisplay = document.getElementById('animation-display');
+
+        let animationInterval; // 用于控制动画的定时器
+
+        /**
+         * Fisher-Yates (aka Knuth) 洗牌算法
+         * @param {Array} array 需要被洗牌的数组
+         */
+        function shuffleArray(array) {
+            let currentIndex = array.length, randomIndex;
+            // 当还剩下元素可以洗牌时
+            while (currentIndex !== 0) {
+                // 选取一个剩余的元素
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                // 将它与当前元素交换
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        // 为“开始抽奖”按钮添加点击事件
+        drawButton.addEventListener('click', () => {
+            // 1. 获取用户输入
+            const totalParticipants = parseInt(participantsInput.value);
+            const numberOfWinners = parseInt(winnersCountInput.value);
+            const shuffleRounds = parseInt(shuffleRoundsInput.value);
+
+            // 2. 清空上次结果并重置UI
+            winnerList.innerHTML = '';
+            resultsContainer.style.display = 'none';
+            if (animationInterval) clearInterval(animationInterval); // 清除可能存在的上一次动画
+
+            // 3. 输入验证
+            if (isNaN(totalParticipants) || isNaN(numberOfWinners) || totalParticipants <= 0 || numberOfWinners <= 0 || shuffleRounds <= 0) {
+                alert('请输入有效的总人数、中奖名额和洗牌轮数！');
+                return;
+            }
+            if (numberOfWinners > totalParticipants) {
+                alert('中奖名额不能大于总参与人数！');
+                return;
+            }
+
+            // 4. 准备抽奖
+            drawButton.disabled = true; // 禁用按钮防止重复点击
+            resultsContainer.style.display = 'block'; // 显示结果区域
+            
+            // 5. 开始抽奖动画
+            const animationDuration = 3000; // 动画持续时间（毫秒）
+            const animationSpeed = 50; // 号码滚动速度（毫秒）
+
+            animationInterval = setInterval(() => {
+                const randomNumber = Math.floor(Math.random() * totalParticipants) + 1;
+                animationDisplay.textContent = randomNumber;
+            }, animationSpeed);
+
+            // 6. 在动画结束后执行真正的抽奖逻辑
+            setTimeout(() => {
+                clearInterval(animationInterval); // 停止动画
+
+                // 创建参与者列表
+                let participantsArray = Array.from({ length: totalParticipants }, (_, i) => i + 1);
+
+                // 执行指定轮数的洗牌
+                console.log(`开始执行 ${shuffleRounds} 轮洗牌...`);
+                for (let i = 0; i < shuffleRounds; i++) {
+                    participantsArray = shuffleArray(participantsArray);
+                }
+                console.log('洗牌完成!');
+
+                // 从洗牌后的数组中取出前N个作为中奖者
+                const winners = participantsArray.slice(0, numberOfWinners);
+                
+                // 对中奖号码排序以便显示
+                winners.sort((a, b) => a - b);
+
+                // 最终在动画位置显示“揭晓”
+                animationDisplay.textContent = '🎉';
+                
+                // 显示最终的中奖名单
+                winners.forEach(winner => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = `恭喜号码：${winner} 中奖！`;
+                    winnerList.appendChild(listItem);
+                });
+
+                drawButton.disabled = false; // 恢复按钮
+            }, animationDuration);
+        });
+    </script>
+
+</body>
+</html>
